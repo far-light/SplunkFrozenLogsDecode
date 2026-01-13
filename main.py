@@ -73,11 +73,7 @@ def main():
         "--project",
         help="GCP Project ID (optional, defaults to environment)"
     )
-    parser.add_argument(
-        "--console",
-        action="store_true",
-        help="Print events to stdout instead of writing to GCS/BigQuery (for debugging)"
-    )
+
     parser.add_argument(
         "-v", "--verbose", 
         action="store_true", 
