@@ -121,7 +121,7 @@ class GCSJournalReader:
         Args:
             bucket_name: Source bucket containing journal files
             prefix: Prefix to filter journal files
-            output_format: Output format ("jsonl" or "json")
+            output_format: Output format ("jsonl", "json", or "bigquery")
             output_bucket: Destination bucket for output (if None, uses source bucket)
             output_prefix: Prefix for output files
             

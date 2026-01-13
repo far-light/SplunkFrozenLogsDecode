@@ -3,7 +3,7 @@
 Splunk Frozen Logs Export Tool
 
 Single-script utility to batch process Splunk journal files from Google Cloud Storage
-and export them to GCS as JSONL.
+and export them to BigQuery or destination GCS buckets.
 
 Usage:
     export_logs.py <bucket> [options]
@@ -11,6 +11,9 @@ Usage:
 Examples:
     # Process all journals in a bucket and save as JSONL to another bucket
     python3 export_logs.py gs://splunk-logs/frozen --output-bucket gs://decoded-logs
+
+    # Process and stream to BigQuery (Table schema auto-detected)
+    python3 export_logs.py gs://splunk-logs/frozen --bq-table my-project.dataset.table
 """
 
 import argparse
@@ -51,7 +54,7 @@ def configure_logging(verbose: bool = False):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Export frozen Splunk logs from GCS to JSONL"
+        description="Export frozen Splunk logs from GCS to BigQuery or JSONL"
     )
     parser.add_argument(
         "source", 
@@ -73,7 +76,7 @@ def main():
     parser.add_argument(
         "--console",
         action="store_true",
-        help="Print events to stdout instead of writing to GCS (for debugging)"
+        help="Print events to stdout instead of writing to GCS/BigQuery (for debugging)"
     )
     parser.add_argument(
         "-v", "--verbose", 
@@ -110,6 +113,12 @@ def main():
     
     try:
         reader = GCSJournalReader(project_id=args.project)
+        
+        # We need to map the output_format to what process_bucket expects
+        # process_bucket currently expects 'bigquery' or 'jsonl'
+        
+        # If output_bucket is specified, use it
+        output_bucket_name = dest_bucket if output_format == "jsonl" else None
         
         total_events = reader.process_bucket(
             bucket_name=source_bucket,
