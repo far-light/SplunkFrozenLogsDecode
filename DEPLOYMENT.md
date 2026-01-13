@@ -1,176 +1,264 @@
-# Deployment Instructions (Without Cloud Shell)
+# Deployment Guide
 
-## Prerequisites
-- GCP Project with billing enabled
-- Code pushed to GitHub repository (or use Cloud Source Repositories)
-- Service account created (see below)
+This guide covers deploying the Splunk Frozen Logs Decoder to Google Cloud Run Jobs using either the **gcloud CLI** or the **GCP Console UI**.
 
 ---
 
-## Step 1: Push Code to GitHub
+## Prerequisites
 
-Since you can't use Cloud Shell, push your code to GitHub:
+- GCP project with billing enabled
+- Required APIs enabled:
+  - Cloud Run API
+  - Cloud Storage API
+  - Cloud Build API
+- Service account with permissions:
+  - `Storage Object Viewer` (read frozen logs)
+  - `Storage Object Admin` (write decoded output)
+
+---
+
+## Method 1: Deploy via gcloud CLI
+
+### 1. Install gcloud SDK
 
 ```bash
-# From your local machine
-git add .
-git commit -m "Ready for deployment"
-git push origin main
+# macOS (Homebrew)
+brew install --cask google-cloud-sdk
+
+# Other platforms: https://cloud.google.com/sdk/docs/install
+```
+
+### 2. Authenticate and Set Project
+
+```bash
+gcloud auth login
+gcloud config set project YOUR_PROJECT_ID
+```
+
+### 3. Create Service Account
+
+```bash
+# Create service account
+gcloud iam service-accounts create splunk-decoder \
+  --display-name="Splunk Decoder Service Account"
+
+# Grant permissions
+gcloud projects add-iam-policy-binding YOUR_PROJECT_ID \
+  --member="serviceAccount:splunk-decoder@YOUR_PROJECT_ID.iam.gserviceaccount.com" \
+  --role="roles/storage.objectViewer"
+
+gcloud projects add-iam-policy-binding YOUR_PROJECT_ID \
+  --member="serviceAccount:splunk-decoder@YOUR_PROJECT_ID.iam.gserviceaccount.com" \
+  --role="roles/storage.objectAdmin"
+```
+
+### 4. Create Storage Buckets
+
+```bash
+# Source bucket (Archive storage for frozen logs)
+gsutil mb -c ARCHIVE -l REGION gs://YOUR-FROZEN-BUCKET
+
+# Output bucket (Standard storage for decoded JSONL)
+gsutil mb -l REGION gs://YOUR-OUTPUT-BUCKET
+```
+
+### 5. Deploy Cloud Run Job from GitHub
+
+```bash
+# Clone repository locally
+git clone https://github.com/far-light/SplunkFrozenLogsDecode.git
+cd SplunkFrozenLogsDecode
+
+# Deploy to Cloud Run Jobs
+gcloud run jobs deploy splunk-decoder \
+  --region=REGION \
+  --memory=512Mi \
+  --cpu=1 \
+  --max-retries=0 \
+  --task-timeout=300 \
+  --service-account=splunk-decoder@YOUR_PROJECT_ID.iam.gserviceaccount.com \
+  --source=.
+```
+
+**Note**: First deployment creates an Artifact Registry repository (~2-3 minutes build time).
+
+### 6. Execute Job
+
+```bash
+gcloud run jobs execute splunk-decoder \
+  --args="gs://YOUR-FROZEN-BUCKET/path/to/frozen,--output-bucket,gs://YOUR-OUTPUT-BUCKET" \
+  --region=REGION \
+  --wait
 ```
 
 ---
 
-## Step 2: Create Service Account (GCP Console)
+## Method 2: Deploy via GCP Console UI
 
-1. Go to [IAM & Admin > Service Accounts](https://console.cloud.google.com/iam-admin/serviceaccounts)
-2. Click **"CREATE SERVICE ACCOUNT"**
-3. Fill in:
-   - **Name**: `splunk-decoder`
-   - **Description**: `Service account for Splunk log decoder`
-4. Click **"CREATE AND CONTINUE"**
-5. Add roles:
-   - Click **"SELECT A ROLE"**
-   - Add: `Storage Object Viewer`
-   - Click **"ADD ANOTHER ROLE"**
-   - Add: `Storage Object Admin`
-6. Click **"DONE"**
+### 1. Enable APIs
 
----
+1. Go to: **APIs & Services** → **Library**
+2. Search and enable:
+   - Cloud Run API
+   - Cloud Storage API
+   - Cloud Build API
 
-## Step 3: Enable Required APIs
+### 2. Create Service Account
 
-1. Go to [APIs & Services](https://console.cloud.google.com/apis/dashboard)
-2. Click **"+ ENABLE APIS AND SERVICES"**
-3. Search and enable:
-   - **Cloud Run API**
-   - **Cloud Storage API**
-   - **Cloud Build API**
+1. Go to: **IAM & Admin** → **Service Accounts**
+2. Click **CREATE SERVICE ACCOUNT**
+   - Name: `splunk-decoder`
+   - Description: `Service account for Splunk decoder`
+3. Click **CREATE AND CONTINUE**
+4. Add roles:
+   - `Storage Object Viewer`
+   - `Storage Object Admin`
+5. Click **DONE**
 
----
+### 3. Create Storage Buckets
 
-## Step 4: Create Output Bucket (GCP Console)
+**Source Bucket:**
+1. Go to: **Cloud Storage** → **Buckets**
+2. Click **CREATE BUCKET**
+   - Name: `your-frozen-bucket`
+   - Location: Choose region (e.g., `us-central1`)
+   - Storage class: **Archive**
+3. Click **CREATE**
 
-1. Go to [Cloud Storage](https://console.cloud.google.com/storage/browser)
-2. Click **"CREATE BUCKET"**
-3. Configure:
-   - **Name**: `YOUR-PROJECT-ID-splunk-decoded` (must be globally unique)
-   - **Location**: `us-central1` (region)
-   - **Storage class**: `Standard`
-4. Click **"CREATE"**
+**Output Bucket:**
+4. Click **CREATE BUCKET** again
+   - Name: `your-output-bucket`
+   - Location: Same region as source
+   - Storage class: **Standard**
+5. Click **CREATE**
 
-### Set Lifecycle Rule (Auto-Delete After 1 Day)
+### 4. Deploy Cloud Run Job
 
-1. Click on your bucket name
-2. Go to **"LIFECYCLE"** tab
-3. Click **"ADD A RULE"**
-4. Configure:
-   - **Action**: Select **"Delete object"**
-   - Click **"CONTINUE"**
-   - **Conditions**: Set **"Age"** to `1` day
-   - Click **"CONTINUE"**
-5. Click **"CREATE"**
+1. Go to: **Cloud Run** → **Jobs**
+2. Click **CREATE JOB**
+3. **Container configuration:**
+   - Container image URL: Leave blank for now
+   - Click **Deploy from source repository**
 
----
+4. **Source repository:**
+   - Repository provider: **GitHub**
+   - Click **Set up with Cloud Build**
+   - Authorize GitHub access
+   - Select repository: `far-light/SplunkFrozenLogsDecode`
+   - Branch: `main`
+   - Build type: **Dockerfile**
 
-## Step 5: Deploy Cloud Run Job (GCP Console)
+5. **Job settings:**
+   - Job name: `splunk-decoder`
+   - Region: Same as buckets (e.g., `us-central1`)
 
-1. Go to [Cloud Run Jobs](https://console.cloud.google.com/run/jobs)
-2. Click **"CREATE JOB"**
-3. Configure:
+6. **Service account:**
+   - Under **Security** → **Service account**
+   - Select: `splunk-decoder@YOUR_PROJECT_ID.iam.gserviceaccount.com`
 
-### Container Section
-- **Deployment platform**: Cloud Run (fully managed)
-- **Job name**: `splunk-decoder`
-- **Region**: `us-central1`
+7. **Resources:**
+   - Memory: `512 MiB`
+   - CPU: `1`
+   - Task timeout: `300 seconds`
+   - Max retries: `0`
 
-### Container Settings
-- Click **"Set up with Cloud Build"**
-  - **Repository provider**: Select **"GitHub"**
-  - Click **"CONNECT TO GITHUB"** and authorize
-  - Select your repository
-  - **Branch**: `main` (or your default branch)
-  - **Build type**: Will auto-detect as **Python**
-  - Click **"SAVE"**
+8. Click **CREATE** (build takes 2-3 minutes)
 
-### Resources Allocation
-- **Memory**: `2 GiB`
-- **CPU**: `1`
-- **Maximum number of tasks**: `1`
-- **Task timeout**: `3600` seconds (1 hour)
+### 5. Execute Job via Console
 
-### Security
-- **Service account**: Select `splunk-decoder@YOUR-PROJECT-ID.iam.gserviceaccount.com`
-
-4. Click **"CREATE"**
-
-**Wait**: The initial deployment will take 3-5 minutes while Cloud Build creates the container.
-
----
-
-## Step 6: Execute the Job (GCP Console)
-
-1. Go to your job: [Cloud Run Jobs > splunk-decoder](https://console.cloud.google.com/run/jobs)
-2. Click **"EXECUTE"**
-3. Under **"Container arguments override"**, enter:
+1. Go to your job: **Cloud Run** → **Jobs** → `splunk-decoder`
+2. Click **EXECUTE**
+3. **Container arguments**:
    ```
-   gs://YOUR-SOURCE-BUCKET/frozen/db
+   gs://your-frozen-bucket/path/to/frozen
    --output-bucket
-   gs://YOUR-PROJECT-ID-splunk-decoded
-   --console
+   gs://your-output-bucket
    ```
-4. Click **"EXECUTE"**
+4. Click **EXECUTE**
+5. Monitor execution in **EXECUTIONS** tab
+6. View logs in **LOGS** tab
 
 ---
 
-## Step 7: View Results
+## Verification
 
-### Option A: View Console Output (Debugging)
-1. Click on the execution name
-2. Go to **"LOGS"** tab
-3. You'll see each decoded event printed as JSON
+### Check Output Files
 
-### Option B: Download JSONL Files
-1. Go to [Cloud Storage](https://console.cloud.google.com/storage/browser)
-2. Click on `YOUR-PROJECT-ID-splunk-decoded` bucket
-3. Navigate to `decoded/` folder
-4. Download `.jsonl` files
+**CLI:**
+```bash
+gsutil ls -lh gs://your-output-bucket/decoded/
+```
+
+**Console:**
+- Go to: **Cloud Storage** → `your-output-bucket` → `decoded/`
+- Verify JSONL files exist
+
+### Download Sample
+
+```bash
+gsutil cp gs://your-output-bucket/decoded/FILENAME.jsonl ./
+head FILENAME.jsonl
+```
+
+---
+
+## Cost Optimization
+
+**For minimal cost usage:**
+- Use **Archive** storage class for frozen logs (if not already)
+- Use **Standard** storage class for output (temporary analysis)
+- Execute jobs on-demand (not scheduled)
+- Delete output files after analysis
+- Use 512 MiB memory (lowest tier)
+
+**Typical costs per execution:**
+- Cloud Run: $0.01-0.02 per job (512 MiB, 1-2 minutes)
+- Cloud Build: $0.01-0.03 per build (first deployment only)
+- Storage: Minimal for temporary output
 
 ---
 
 ## Troubleshooting
 
-### Error: "Permission Denied"
-**Solution**: Add Storage permissions to service account
-1. Go to [IAM & Admin](https://console.cloud.google.com/iam-admin/iam)
-2. Find `splunk-decoder@...` service account
-3. Click **Edit** (pencil icon)
-4. Add roles: `Storage Object Viewer` and `Storage Object Admin`
+### Build Fails
 
-### Error: "Cloud Build API not enabled"
-**Solution**: Enable it at [APIs & Services](https://console.cloud.google.com/apis/library/cloudbuild.googleapis.com)
-
-### Job Timeout
-**Solution**: Increase timeout:
-1. Go to job details
-2. Click **"EDIT"**
-3. Under **"Container"** > **"General"**, set **"Task timeout"** to higher value (max: 3600s)
-
----
-
-## Cost Estimate
-
-For a 1 TB job:
-- **Cloud Run**: ~$4.33
-- **Temp Storage**: ~$0.11 (with 1-day lifecycle rule)
-- **Total**: ~$4.44
-
----
-
-## Summary Commands (For Reference)
-
-If you later gain Cloud Shell access, you can execute like this:
+**Check Cloud Build logs:**
 ```bash
-gcloud run jobs execute splunk-decoder \
-  --args="gs://YOUR-BUCKET/frozen/db,--output-bucket,gs://output-bucket,--console" \
-  --region us-central1
+gcloud builds list --limit=5
+gcloud builds log BUILD_ID
+```
+
+### Job Execution Fails
+
+**Check job logs:**
+```bash
+gcloud logging read "resource.type=cloud_run_job" --limit=50
+```
+
+**Console:** Jobs → Execution → LOGS tab
+
+### Permission Errors
+
+Verify service account has both:
+- `Storage Object Viewer` (read source)
+- `Storage Object Admin` (write output)
+
+---
+
+## Cleanup
+
+### Delete Job
+```bash
+gcloud run jobs delete splunk-decoder --region=REGION
+```
+
+### Delete Buckets
+```bash
+gsutil -m rm -r gs://your-frozen-bucket
+gsutil -m rm -r gs://your-output-bucket
+```
+
+### Delete Service Account
+```bash
+gcloud iam service-accounts delete splunk-decoder@YOUR_PROJECT_ID.iam.gserviceaccount.com
 ```
