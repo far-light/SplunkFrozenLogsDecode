@@ -114,12 +114,7 @@ def main():
     try:
         reader = GCSJournalReader(project_id=args.project)
         
-        # We need to map the output_format to what process_bucket expects
-        # process_bucket currently expects 'bigquery' or 'jsonl'
-        
-        # If output_bucket is specified, use it
-        output_bucket_name = dest_bucket if output_format == "jsonl" else None
-        
+
         total_events = reader.process_bucket(
             bucket_name=source_bucket,
             prefix=source_prefix,
