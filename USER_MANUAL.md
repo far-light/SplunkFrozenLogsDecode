@@ -143,20 +143,19 @@ cat decoded/*.jsonl | jq 'select(.index_time > 1704067200)'
 ### Step 2: Execute Job
 
 1. Click **EXECUTE** button (top right)
-2. **Container arguments** section:
-   - Line 1: `gs://your-frozen-bucket/path/to/frozen`
-   - Line 2: `--output-bucket`
-   - Line 3: `gs://your-output-bucket`
-   - Line 4 (optional): `--output-prefix`
-   - Line 5 (optional): `custom/prefix/`
+2. **Container arguments** field (single line, space-separated):
+   ```
+   gs://your-frozen-bucket/path/to/frozen --output-bucket gs://your-output-bucket
+   ```
+
+**With custom output prefix:**
+```
+gs://your-frozen-bucket/path/to/frozen --output-bucket gs://your-output-bucket --output-prefix investigation/jan/
+```
 
 **Example:**
 ```
-gs://frozen-logs/db_2024_01
---output-bucket
-gs://decoded-logs
---output-prefix
-investigation/jan/
+gs://frozen-logs/db_2024_01 --output-bucket gs://decoded-logs --output-prefix investigation/jan/
 ```
 
 3. Click **EXECUTE**

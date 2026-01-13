@@ -52,7 +52,30 @@ gcloud projects add-iam-policy-binding YOUR_PROJECT_ID \
   --role="roles/storage.objectAdmin"
 ```
 
-### 4. Create Storage Buckets
+### 4. Create Artifact Registry Repository
+
+Artifact Registry stores the Docker container images built from your source code.
+
+```bash
+# Create Docker repository for container images
+gcloud artifacts repositories create cloud-run-source-deploy \
+  --repository-format=docker \
+  --location=REGION \
+  --description="Container images for Cloud Run deployments"
+```
+
+**Repository details:**
+- **Name**: `cloud-run-source-deploy` (standard name for Cloud Run source deployments)
+- **Format**: Docker
+- **Location**: Must match your Cloud Run region
+- **Purpose**: Stores built container images (~100-200 MB per image)
+
+**Verify creation:**
+```bash
+gcloud artifacts repositories list --location=REGION
+```
+
+### 5. Create Storage Buckets
 
 ```bash
 # Source bucket (Archive storage for frozen logs)
@@ -62,7 +85,7 @@ gsutil mb -c ARCHIVE -l REGION gs://YOUR-FROZEN-BUCKET
 gsutil mb -l REGION gs://YOUR-OUTPUT-BUCKET
 ```
 
-### 5. Deploy Cloud Run Job from GitHub
+### 6. Deploy Cloud Run Job from GitHub
 
 ```bash
 # Clone repository locally
@@ -80,9 +103,9 @@ gcloud run jobs deploy splunk-decoder \
   --source=.
 ```
 
-**Note**: First deployment creates an Artifact Registry repository (~2-3 minutes build time).
+**Build time**: First build takes ~2-3 minutes. Subsequent builds are faster due to layer caching.
 
-### 6. Execute Job
+### 7. Execute Job
 
 ```bash
 gcloud run jobs execute splunk-decoder \
@@ -115,7 +138,27 @@ gcloud run jobs execute splunk-decoder \
    - `Storage Object Admin`
 5. Click **DONE**
 
-### 3. Create Storage Buckets
+### 3. Create Artifact Registry Repository
+
+Artifact Registry stores Docker container images built during deployment.
+
+1. Go to: **Artifact Registry** → **Repositories**
+2. Click **CREATE REPOSITORY**
+3. Configure repository:
+   - **Name**: `cloud-run-source-deploy`
+   - **Format**: **Docker**
+   - **Mode**: **Standard**
+   - **Location type**: **Region**
+   - **Region**: Same as your Cloud Run jobs (e.g., `us-central1`)
+   - **Description**: `Container images for Cloud Run deployments`
+4. Click **CREATE**
+
+**Why needed:**
+- Cloud Run builds Docker images from your source code
+- Images are stored in Artifact Registry (~100-200 MB each)
+- Required before deploying from source
+
+### 4. Create Storage Buckets
 
 **Source Bucket:**
 1. Go to: **Cloud Storage** → **Buckets**
@@ -132,7 +175,7 @@ gcloud run jobs execute splunk-decoder \
    - Storage class: **Standard**
 5. Click **CREATE**
 
-### 4. Deploy Cloud Run Job
+### 5. Deploy Cloud Run Job
 
 1. Go to: **Cloud Run** → **Jobs**
 2. Click **CREATE JOB**
@@ -162,17 +205,20 @@ gcloud run jobs execute splunk-decoder \
    - Task timeout: `300 seconds`
    - Max retries: `0`
 
-8. Click **CREATE** (build takes 2-3 minutes)
+8. Click **CREATE**
 
-### 5. Execute Job via Console
+**Build process:**
+- Container image builds from source (~2-3 minutes)
+- Image stored in Artifact Registry repository
+- Subsequent deployments faster (layer caching)
+
+### 6. Execute Job via Console
 
 1. Go to your job: **Cloud Run** → **Jobs** → `splunk-decoder`
 2. Click **EXECUTE**
-3. **Container arguments**:
+3. **Container arguments** (single line, space-separated):
    ```
-   gs://your-frozen-bucket/path/to/frozen
-   --output-bucket
-   gs://your-output-bucket
+   gs://your-frozen-bucket/path/to/frozen --output-bucket gs://your-output-bucket
    ```
 4. Click **EXECUTE**
 5. Monitor execution in **EXECUTIONS** tab
