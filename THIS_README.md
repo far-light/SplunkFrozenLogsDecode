@@ -28,7 +28,7 @@ deploy/
 - ❌ Git history (`.git/`)
 - ❌ Work artifacts (`.gemini/`, task files)
 - ❌ Local development files (`__pycache__/`, `.pytest_cache/`)
-- ❌ Deployment scripts for EPAM account
+- ❌ Company-specific deployment scripts
 
 ## Upload to Your Personal GitHub
 

@@ -9,9 +9,8 @@ Extract and analyze archived Splunk data by converting compressed `.zst` journal
 When Splunk archives data to "frozen" buckets in GCS, the logs are stored in a proprietary compressed binary format. This tool:
 1.  Decodes those journals back to readable log events.
 2.  Outputs to GCS as JSONL for download or further processing.
-3.  Optionally loads to BigQuery for SQL-based investigation.
 
-**Typical Workflow**: Investigate a security incident → Identify relevant frozen bucket → Decode → Analyze in BigQuery.
+**Typical Workflow**: Investigate a security incident → Identify relevant frozen bucket → Decode → Analyze JSONL locally or import to your analysis platform.
 
 ---
 
@@ -20,8 +19,8 @@ When Splunk archives data to "frozen" buckets in GCS, the logs are stored in a p
 ✅ **Decode Splunk journal files** - Supports both `.zst` compressed and uncompressed formats  
 ✅ **GCS Integration** - Process journals directly from Cloud Storage buckets  
 ✅ **JSONL Output** - Industry-standard format for log analysis  
-✅ **BigQuery Ready** - Optional direct loading for SQL queries  
-✅ **Flexible Execution** - Run locally or deploy to Cloud Run for faster processing
+✅ **Console Debugging** - Print events to stdout for Cloud Run Jobs  
+✅ **Flexible Execution** - Run locally or deploy to Cloud Run
 
 ---
 
@@ -39,21 +38,12 @@ export GOOGLE_APPLICATION_CREDENTIALS="/path/to/service-account-key.json"
 
 ### 3. Decode Logs to JSONL
 ```bash
-# Decode a frozen bucket to temporary GCS storage
+# Decode a frozen bucket to GCS storage
 python3 export_logs.py gs://my-bucket/frozen/db_2024_01 \
   --output-bucket gs://temp-decoded \
   --output-prefix investigation-jan-2024/
 
 # Result: JSONL files written to gs://temp-decoded/investigation-jan-2024/*.jsonl
-```
-
-### 4. Optional: Load to BigQuery
-```bash
-# Decode and load directly to BigQuery for SQL analysis
-python3 export_logs.py gs://my-bucket/frozen/db_2024_01 \
-  --bq-table my-project.splunk_logs.january_investigation
-
-# Result: Data available for querying immediately
 ```
 
 ---
@@ -63,7 +53,6 @@ python3 export_logs.py gs://my-bucket/frozen/db_2024_01 \
 ### 1. Enable Required APIs
 ```bash
 gcloud services enable storage.googleapis.com
-gcloud services enable bigquery.googleapis.com
 gcloud services enable run.googleapis.com  # Optional: if using Cloud Run
 ```
 
@@ -82,14 +71,11 @@ gcloud projects add-iam-policy-binding PROJECT_ID \
   --member="serviceAccount:splunk-decoder@PROJECT_ID.iam.gserviceaccount.com" \
   --role="roles/storage.objectAdmin"
 
-# Grant BigQuery permissions (optional, if loading to BQ)
 gcloud projects add-iam-policy-binding PROJECT_ID \
   --member="serviceAccount:splunk-decoder@PROJECT_ID.iam.gserviceaccount.com" \
-  --role="roles/bigquery.dataEditor"
 
 gcloud projects add-iam-policy-binding PROJECT_ID \
   --member="serviceAccount:splunk-decoder@PROJECT_ID.iam.gserviceaccount.com" \
-  --role="roles/bigquery.jobUser"
 
 # Download key for local use
 gcloud iam service-accounts keys create ~/splunk-decoder-key.json \
@@ -116,7 +102,6 @@ EOF
 gsutil lifecycle set lifecycle.json gs://PROJECT_ID-splunk-decoded
 ```
 
-### 4. Create BigQuery Dataset (Optional)
 ```bash
 bq mk --dataset --location=us-central1 PROJECT_ID:splunk_logs
 
@@ -139,7 +124,6 @@ export GOOGLE_APPLICATION_CREDENTIALS="$HOME/splunk-decoder-key.json"
 | Option | Description |
 |--------|-------------|
 | `source` | Source GCS path (e.g., `gs://bucket/frozen/db_*/`) |
-| `--bq-table` | Target BigQuery table (e.g., `project.dataset.table`) |
 | `--output-bucket` | Target GCS bucket for JSONL output |
 | `--output-prefix` | Prefix for output files (default: `decoded/`) |
 | `--project` | GCP Project ID (optional, auto-detected if not provided) |
@@ -222,7 +206,6 @@ Each decoded event contains:
 ### Cost Optimization Recommendations
 1.  **Use Economy Mode** (Batch Load) for all jobs. Saves $75/TB on ingestion.
 2.  **Set GCS Lifecycle Rules**: Auto-delete temp JSONL files after 1 day.
-3.  **Enable Physical Storage Billing** in BigQuery dataset settings.
 4.  **Use Partitioned Tables**: Set table expiration (e.g., 90 days) for investigations.
 
 ### Example: Typical Investigation (500 GB)
@@ -326,7 +309,6 @@ The decoder combines the raw message with the current **Active State** (Host, So
 - Python 3.8+
 - `zstandard>=0.22.0` - For decompression
 - `google-cloud-storage>=2.10.0` - For GCS integration
-- `google-cloud-bigquery>=3.11.0` - For BigQuery streaming
 
 ---
 
