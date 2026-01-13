@@ -118,7 +118,7 @@ def main():
         total_events = reader.process_bucket(
             bucket_name=source_bucket,
             prefix=source_prefix,
-            output_format="console" if args.console else "jsonl",
+            output_format="jsonl",
             output_bucket=dest_bucket,
             output_prefix=args.output_prefix
         )
